@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokino · Imprimir cartones</title>
+<script src="pokino-core.js"></script>
+<script src="pokino-cards.js"></script>
+<style id="pagesize">@page { size: A4 portrait; margin: 0; }</style>
+<style>
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, sans-serif; background: #ddd; color: #000; }
+  .controls { padding: 14px; background: #fff; border-bottom: 1px solid #bbb; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 15px; }
+  .controls input { width: 80px; padding: 6px; font-size: 15px; } .controls button { padding: 8px 16px; font-size: 15px; font-weight: 700; }
+  .sheet { width: 210mm; height: 297mm; margin: 10mm auto; background: #fff; display: grid; grid-template-columns: 105mm 105mm; grid-template-rows: 148.5mm 148.5mm; position: relative; break-after: page; page-break-after: always; }
+  .sheet::before { content: ''; position: absolute; left: 105mm; top: 0; bottom: 0; border-left: 0.2mm dashed #999; }
+  .sheet::after { content: ''; position: absolute; top: 148.5mm; left: 0; right: 0; border-top: 0.2mm dashed #999; }
+  .card { padding: 6mm 6mm 4mm; display: flex; flex-direction: column; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; height: 8mm; }
+  .head .t { font-size: 14pt; font-weight: 800; } .head .n { font-size: 11pt; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 23.5mm); gap: 0.8mm; }
+  .cell { border: 0.3mm solid #000; border-radius: 1mm; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .cell svg { height: 22mm; width: auto; }
+  .row1 { background: #fff3c4; } .bw .row1 { background: #e4e4e4; }
+  .row2 { border-width: 0.6mm; }
+  .center { border-width: 0.8mm; border-style: double; }
+  .foot { margin-top: auto; font-size: 7.5pt; line-height: 1.35; }
+  .sheet1 { width: 210mm; height: 297mm; margin: 10mm auto; background: #fff; display: grid; grid-template-columns: 50mm 1fr; gap: 6mm; padding: 11mm 9mm; break-after: page; page-break-after: always; }
+  .rules { display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 12mm; }
+  .rules h2 { font-size: 15pt; margin: 2mm 0 0; }
+  .rule { display: grid; grid-template-columns: 19mm 1fr; gap: 2.5mm; align-items: start; margin-bottom: 0; }
+  .mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5mm; width: 19mm; height: 19mm; }
+  .mini i { background: #e8e8e8; border-radius: 0.6mm; }
+  .mini i.on { background: #1f6b3a; } .bw .mini i.on { background: #000; }
+  .mini i.alt { background: #9fcfaf; } .bw .mini i.alt { background: #888; }
+  .legend { font-size: 8.5pt; color: #444; margin-top: 2mm; } .legend i { display: inline-block; width: 3mm; height: 3mm; border-radius: 0.5mm; vertical-align: -0.4mm; margin: 0 1mm 0 2.5mm; }
+  .rule b { font-size: 11.5pt; display: block; } .rule span { font-size: 8.3pt; line-height: 1.22; color: #333; display: block; }
+  .big { display: flex; flex-direction: column; }
+  .big .head { height: 12mm; } .big .note { font-size: 9pt; color: #444; margin-top: 3mm; } .big .head .t { font-size: 20pt; } .big .head .n { font-size: 15pt; }
+  .big .grid { grid-template-rows: repeat(5, 48mm); gap: 1.2mm; }
+  .big .cell { border-width: 0.4mm; border-radius: 1.6mm; } .big .cell svg { width: 96%; height: auto; max-height: 46mm; }
+  .big .row2 { border-width: 0.9mm; } .big .center { border-width: 1.2mm; }
+  .logo { height: 8mm; display: block; } .big .logo { height: 12mm; }
+  .ico { height: 7mm; width: 7mm; object-fit: contain; vertical-align: middle; margin-right: 1.5mm; }
+  .note .masc { height: 15mm; vertical-align: middle; margin-right: 2mm; }
+  .note { display: flex; align-items: center; }
+  @media print { body { background: #fff; } .controls { display: none; } .sheet, .sheet1 { margin: 0; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="controls">
+  <label>Primer nº <input type="number" id="desde" value="1" min="1"></label>
+  <label>Hojas <input type="number" id="hojas" value="4" min="1" max="50"></label>
+  <label>Formato <select id="fmt"><option value="1">1 por hoja, con jugadas</option><option value="4">4 por hoja</option></select></label>
+  <label><input type="checkbox" id="color" checked> En color</label>
+  <button id="gen">Generar</button><button id="print">Imprimir</button>
+  
+</div>
+<div id="out"></div>
+<script>
+'use strict';
+const P = window.PokinoCore, K = window.PokinoCards, $ = id => document.getElementById(id);
+const col = () => $('color').checked;
+const title = () => col() ? '<img class="logo" src="img_pk/pk_logo.png" alt="Pokino">' : '<span class="t">Pokino</span>';
+function cardHtml(n) {
+  const c = P.cardFromNumber(n);
+  const cells = c.cells.map((id, i) => `<div class="cell ${i < 5 ? 'row1' : ''} ${i >= 5 && i < 10 ? 'row2' : ''} ${i === 12 ? 'center' : ''}">${K.cardSVG(id, { style: 'compact', bw: !$('color').checked, frame: false })}</div>`).join('');
+  return `<div class="card"><div class="head">${title()}<span class="n">Nº ${String(n).padStart(4, '0')}</span></div>
+    <div class="grid">${cells}</div>
+    <div class="foot">Fila 1 sombreada: Póker · Fila 2 gruesa: Full · Centro: borde doble<br>Esquina · Estampa (2×2 en una esquina) · Pokino: línea de 5, no la del Full</div></div>`;
+}
+const MINI = {
+  centro:  { on: [12], txt: 'La carta del centro.' },
+  esquina: { on: [0, 4, 20, 24], txt: 'Las 4 esquinas del cartón.' },
+  estampa: { on: [0, 1, 5, 6], alt: [3, 4, 8, 9, 15, 16, 20, 21, 18, 19, 23, 24], txt: 'Un cuadrado de 2×2 en cualquiera de las 4 esquinas.' },
+  poker:   { on: null, txt: 'Las 4 cartas del mismo número de la fila 1 (la sombreada).' },
+  full:    { on: [5, 6, 7, 8, 9], txt: 'La fila 2 entera (la de borde grueso): 3 de un número y 2 de otro.' },
+  pokino:  { on: [2, 7, 12, 17, 22], alt: [0, 6, 18, 24, 4, 8, 16, 20, 15, 17, 19], txt: 'Cualquier línea de 5: horizontal, vertical o diagonal, excepto la fila 2. ¡Termina la jugada!' },
+};
+function rulesHtml(card) {
+  return '<div class="rules"><h2>Jugadas</h2>' + P.PREMIOS.map(p => {
+    const m = MINI[p];
+    const on = new Set(m.on || [0, 1, 2, 3, 4].filter(i => P.rango(card.cells[i]) === card.pokerRank));
+    const alt = new Set(m.alt || []);
+    const cells = Array.from({ length: 25 }, (_, i) => `<i class="${on.has(i) ? 'on' : alt.has(i) ? 'alt' : ''}"></i>`).join('');
+    return `<div class="rule"><div class="mini">${cells}</div><div><b>${col() ? `<img class="ico" src="img_pk/pk_premio_${p}.png" alt="">` : ''}${P.PREMIO_LABEL[p]}</b><span>${m.txt}</span></div></div>`;
+  }).join('') + `<div class="legend"><i style="background:${$('color').checked ? '#1f6b3a' : '#000'}"></i>ejemplo <i style="background:${$('color').checked ? '#9fcfaf' : '#888'}"></i>otras posiciones válidas</div></div>`;
+}
+function cardHtml1(n) {
+  const c = P.cardFromNumber(n);
+  const cells = c.cells.map((id, i) => `<div class="cell ${i < 5 ? 'row1' : ''} ${i >= 5 && i < 10 ? 'row2' : ''} ${i === 12 ? 'center' : ''}">${K.cardSVG(id, { style: 'compact', bw: !$('color').checked, frame: false })}</div>`).join('');
+  return `<div class="sheet1">${rulesHtml(c)}<div class="big"><div class="head">${title()}<span class="n">Nº ${String(n).padStart(4, '0')}</span></div><div class="grid">${cells}</div><div class="note">${col() ? '<img class="masc" src="img_pk/pk_mascota_reparte.png" alt="">' : ''}Tapa con una ficha cada carta que salga en la tablet. Cuando completes una jugada, ¡cántala!</div></div></div>`;
+}
+function render() {
+  const desde = Math.max(1, +$('desde').value || 1), hojas = Math.min(50, Math.max(1, +$('hojas').value || 1));
+  const uno = $('fmt').value === '1';
+  $('pagesize').textContent = '@page { size: A4 portrait; margin: 0; }';
+  let html = '';
+  if (uno) for (let h = 0; h < hojas; h++) html += cardHtml1(desde + h);
+  else for (let h = 0; h < hojas; h++) { html += '<div class="sheet">'; for (let k = 0; k < 4; k++) html += cardHtml(desde + h * 4 + k); html += '</div>'; }
+  $('out').innerHTML = html; $('out').className = $('color').checked ? '' : 'bw';
+}
+$('gen').onclick = render; $('color').onchange = render; $('fmt').onchange = render; $('print').onclick = () => window.print();
+render();
+</script>
+</body>
+</html>
