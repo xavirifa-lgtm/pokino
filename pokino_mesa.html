@@ -107,7 +107,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 const S = {
   phase: 'setup',            // setup | dealing | paused | over
-  deck: [], drawn: [], won: {}, nextAt: 0, timer: null, guess: null, lastHeard: '', overMsg: '',
+  deck: [], drawn: [], won: {}, wonBy: {}, nextAt: 0, timer: null, guess: null, lastHeard: '', overMsg: '',
 };
 const cfg = () => ({ sec: Math.max(0.5, +$('cfgSec').value || 5), voice: $('cfgVoice').checked, detect: $('cfgDetect').value });
 try { const sv = JSON.parse(localStorage.getItem('pokino_cfg') || '{}'); if (sv.sec) $('cfgSec').value = sv.sec; if (sv.voice === false) $('cfgVoice').checked = false; if (sv.detect) $('cfgDetect').value = sv.detect; } catch {}
@@ -184,7 +184,7 @@ function startRecognition() {
         continue;
       }
       for (let a = 0; a < res.length; a++) {
-        const txt = res[a].transcript; const p = P.detectClaim(txt);
+        const txt = res[a].transcript; const p = P.detectClaim(sinTablet(txt)) || P.detectClaim(txt);
         if (p) { S.lastHeard = txt; onClaim(p, 'voz'); return; }
       }
     }
@@ -231,7 +231,7 @@ async function startBell() {
 // ---------- jugada ----------
 function startRound() {
   try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
-  S.deck = P.shuffle(P.DECK); S.drawn = []; S.won = {}; S.overMsg = ''; S.guess = null;
+  S.deck = P.shuffle(P.DECK); S.drawn = []; S.won = {}; S.wonBy = {}; S.overMsg = ''; S.guess = null;
   const d = cfg().detect;
   if (d === 'voz') startRecognition(); else stopRecognition();
   if (d === 'timbre') { if (!B.calib) R.err = 'El timbre no está calibrado: calíbralo en Musikino (Ajustes → Calibrar timbre).'; else startBell(); }
@@ -294,7 +294,7 @@ function render(flip) {
     const id = P.cardId(p, r), on = S.drawn.includes(id);
     return `<div class="c ${on ? 'on' : ''} ${id === last ? 'last' : ''}">${r}</div>`;
   }).join('')).join('');
-  $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Ganado (carta ' + S.won[p] + ')' : 'En juego'}</span></div>`).join('');
+  $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Cartón ' + (S.wonBy[p] || []).map(n => String(n).padStart(4, '0')).join(' y ') + ' · carta ' + S.won[p] : 'En juego'}</span></div>`).join('');
   $('settings').style.display = (S.phase === 'setup' || S.phase === 'over') ? '' : 'none';
   $('boardPanel').style.display = S.phase === 'setup' ? 'none' : '';   // antes de empezar no hay cartas: deja sitio a los ajustes
 }
@@ -345,6 +345,7 @@ function renderV() {
         ${S.phase === 'paused' ? '<button class="sec" id="mResume">Seguir repartiendo</button>' : '<button class="sec" id="mClose">Cerrar</button>'}</div>`);
     if ($('mAward')) $('mAward').onclick = () => {
       if (!S.won[V.prize]) S.won[V.prize] = S.drawn.length;
+      (S.wonBy[V.prize] = S.wonBy[V.prize] || []).includes(+V.num) || S.wonBy[V.prize].push(+V.num);   // empate: varios cartones
       PK.celebrate({ premio: V.prize, title: '¡' + P.PREMIO_LABEL[V.prize] + '!', subtitle: 'Cartón ' + V.num.padStart(4, '0') });
       if (V.prize === 'pokino') endRound('Pokino del cartón ' + V.num.padStart(4, '0'));
       else { V.awarded = true; V.step = 'prize'; V.prize = null; V.how = 'botón'; render(); renderV(); }

@@ -145,8 +145,14 @@
     if (soundsPokino(t)) return 'pokino';
     // Lo que el reconocedor suele escribir al oír "pokino": "por qué no", "aquí no", "poqui no"...
     // Son frases normales, así que solo cuentan si es casi lo único que se ha dicho (como cuando se grita).
-    const w = t.split(' ').filter(Boolean);
-    if (w.length <= 4 && /\b(porque no|por que no|por qui no|aqui no|poqui no|boqui no|toqui no|po qui no|pa qui no)\b/.test(t)) return 'pokino';
+    // En reconocimiento continuo el texto se va acumulando: se mira solo lo último que se ha dicho.
+    const w = t.split(' ').filter(Boolean), cola = w.slice(-3);
+    const fin = cola.join(' ');
+    if (/\b(porque no|por que no|por qui no|aqui no|poqui no|boqui no|toqui no|po qui no|pa qui no)$/.test(fin)) return 'pokino';
+    // Modo permisivo (pedido expresamente): cualquier palabra que empiece por "po" en un grito corto
+    // (póker ya se ha detectado antes), o un "o"/"no" gritado a solas.
+    if (w.length <= 3 && cola.some(x => /^po/.test(x))) return 'pokino';
+    if (w.length === 1 && (w[0] === 'o' || w[0] === 'no' || w[0] === 'oh')) return 'pokino';
     return null;
   }
 
