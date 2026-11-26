@@ -15,7 +15,17 @@
   body { margin:0; font-family:"Fredoka",system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg) url(img_pk/pk_fondo.jpg) center/cover fixed; color:var(--txt); min-height:100vh; }
   header { display:flex; justify-content:space-between; align-items:center; padding:8px 20px; background:#06180fb3; border-bottom:1px solid var(--line); }
   header .logo { height:58px; display:block; filter:drop-shadow(0 3px 6px #0008); }
-  #headInfo { font-size:20px; }
+  #headInfo { font-size:20px; min-width:150px; text-align:right; }
+  .pots { display:flex; gap:clamp(6px, 1.4vw, 18px); align-items:flex-end; }
+  .pot { display:flex; flex-direction:column; align-items:center; min-width:clamp(48px, 6.5vw, 84px); }
+  .pot .vw { position:relative; }
+  .pot img { height:clamp(46px, 10.5vh, 80px); width:auto; display:block; filter:drop-shadow(0 3px 5px #0008); }
+  .pot b { position:absolute; top:36%; left:50%; transform:translate(-50%, -50%); min-width:30px; padding:1px 7px; border-radius:999px;
+           background:#ffd54a; color:#3a2500; font-size:clamp(15px, 2.6vh, 21px); font-weight:700; text-align:center; box-shadow:0 2px 0 #a36f00, 0 0 0 2px #3a2500; }
+  .pot b.zero { background:#27503b; color:#a9c7b4; box-shadow:0 0 0 2px #0a2417; }
+  .pot span { font-size:12px; color:#cfe3d6; margin-top:1px; white-space:nowrap; }
+  .pot.won img { opacity:.45; }
+  @media (max-width: 760px) { .pot span { display:none; } }
   h1 { margin:0; font-size:24px; } h1 span { color:var(--acc); }
   main { display:grid; grid-template-columns:1fr 380px; gap:18px; padding:18px 20px; }
   @media (max-width: 1000px) { main { grid-template-columns:1fr; } }
@@ -82,7 +92,7 @@
 </style>
 </head>
 <body>
-<header><img class="logo" src="img_pk/pk_logo.png" alt="Pokino"><div class="mut" id="headInfo"></div></header>
+<header><img class="logo" src="img_pk/pk_logo.png" alt="Pokino"><div class="pots" id="pots"></div><div class="mut" id="headInfo"></div></header>
 <main>
   <section class="panel stage" id="stage"></section>
   <aside>
@@ -90,12 +100,13 @@
     <div class="panel" style="margin-top:14px"><b>Premios de esta jugada</b><div id="prizes"></div></div>
     <div class="panel" style="margin-top:14px" id="settings">
       <b>Ajustes</b>
+      <label>Jugadores (cada uno pone 1 ficha en cada vaso por jugada) <input type="number" id="cfgPlayers" value="4" min="1" max="50"></label>
       <label>Segundos para cantar premio entre carta y carta <input type="number" id="cfgSec" value="5" min="2" max="30"></label>
       <label>Cantar las cartas en voz alta <input type="checkbox" id="cfgVoice" checked style="width:22px;height:22px"></label>
       <label>Para cantar premio
         <select id="cfgDetect"><option value="voz">Voz (micrófono)</option><option value="timbre">Timbre físico</option><option value="nada">Solo botón</option></select></label>
       <div class="row" style="justify-content:flex-start;margin:6px 0"><button class="sec" id="bResetCarry" style="font-size:14px;padding:7px 12px">Vasos vacíos (partida nueva)</button></div>
-      <div class="small mut">Voz: gritad "¡Centro!", "¡Póker!", "¡Esquina!"… Para Pokino, "¡Bingo!" (o "¡Línea!"): la palabra "pokino" el reconocedor no la conoce. Timbre: usa la calibración del timbre de Musikino (calíbralo allí).</div>
+      <div class="small mut">Voz: gritad "¡Centro!", "¡Póker!", "¡Esquina!"… o simplemente "¡Yo!" y elegís el premio en pantalla. Para Pokino, "¡Bingo!" (o "¡Línea!"): la palabra "pokino" el reconocedor no la conoce. Timbre: usa la calibración del timbre de Musikino (calíbralo allí).</div>
     </div>
   </aside>
 </main>
@@ -108,12 +119,14 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 const S = {
   phase: 'setup',            // setup | dealing | paused | over
-  deck: [], drawn: [], won: {}, wonBy: {}, carry: (() => { try { return JSON.parse(localStorage.getItem('pokino_carry') || '{}'); } catch { return {}; } })(), nextAt: 0, timer: null, guess: null, lastHeard: '', overMsg: '',
+  deck: [], drawn: [], won: {}, wonBy: {}, pot: (() => { try { return JSON.parse(localStorage.getItem('pokino_pot') || '{}'); } catch { return {}; } })(), wonAmt: {}, nextAt: 0, timer: null, guess: null, lastHeard: '', overMsg: '',
 };
-const cfg = () => ({ sec: Math.max(0.5, +$('cfgSec').value || 5), voice: $('cfgVoice').checked, detect: $('cfgDetect').value });
-try { const sv = JSON.parse(localStorage.getItem('pokino_cfg') || '{}'); if (sv.sec) $('cfgSec').value = sv.sec; if (sv.voice === false) $('cfgVoice').checked = false; if (sv.detect) $('cfgDetect').value = sv.detect; } catch {}
-$('bResetCarry').onclick = () => { S.carry = {}; S.won = {}; try { localStorage.removeItem('pokino_carry'); } catch {} if (S.phase === 'over') S.phase = 'setup'; render(); };
-['cfgSec', 'cfgVoice', 'cfgDetect'].forEach(id => $(id).onchange = () => { try { localStorage.setItem('pokino_cfg', JSON.stringify(cfg())); } catch {} });
+const cfg = () => ({ sec: Math.max(0.5, +$('cfgSec').value || 5), voice: $('cfgVoice').checked, detect: $('cfgDetect').value, players: Math.max(1, Math.min(50, Math.round(+$('cfgPlayers').value || 4))) });
+try { const sv = JSON.parse(localStorage.getItem('pokino_cfg') || '{}'); if (sv.sec) $('cfgSec').value = sv.sec; if (sv.voice === false) $('cfgVoice').checked = false; if (sv.detect) $('cfgDetect').value = sv.detect; if (sv.players) $('cfgPlayers').value = sv.players; } catch {}
+$('bResetCarry').onclick = () => { S.pot = {}; S.won = {}; S.wonBy = {}; savePot(); if (S.phase === 'over') S.phase = 'setup'; render(); };
+function savePot() { try { localStorage.setItem('pokino_pot', JSON.stringify(S.pot)); } catch {} }
+const potN = p => S.pot[p] || 0;
+['cfgSec', 'cfgVoice', 'cfgDetect', 'cfgPlayers'].forEach(id => $(id).onchange = () => { try { localStorage.setItem('pokino_cfg', JSON.stringify(cfg())); } catch {} });
 
 // ---------- voz que canta las cartas ----------
 function say(text) {
@@ -185,6 +198,8 @@ function startRecognition() {
         }
         continue;
       }
+      // "¡Yo!": para la jugada sin adivinar el premio (se elige en pantalla)
+      if (res.isFinal && P.saidYo(sinTablet(res[0].transcript))) { S.lastHeard = res[0].transcript; onClaim(null, 'voz'); return; }
       for (let a = 0; a < res.length; a++) {
         // mientras la frase no está acabada solo valen palabras claras ("po…" podría acabar siendo "póker")
         const txt = res[a].transcript, loose = res.isFinal;
@@ -201,7 +216,7 @@ function stopRecognition() { R.want = false; if (R.rec) try { R.rec.stop(); } ca
 function updateListen() {
   const el = $('listen'); if (!el) return;
   el.className = 'listen' + (R.ok && !R.muted ? ' on' : '');
-  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio (para Pokino, gritad «¡Bingo!»)' : '🎤 Micrófono arrancando…'))
+  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio o «¡Yo!» (para Pokino, mejor «¡Bingo!»)' : '🎤 Micrófono arrancando…'))
     + (R.heard && R.heard.trim() ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '')
     + (!R.ok && R.code && R.code !== 'no-speech' && R.code !== 'aborted' ? `<span class="heard">Aviso del micro: ${esc(R.code)}</span>` : '');
 }
@@ -234,11 +249,9 @@ async function startBell() {
 
 // ---------- jugada ----------
 function startRound() {
-  // los premios ganados en la jugada anterior vuelven a empezar; los no ganados siguen acumulando
-  if (S.phase === 'over') {
-    for (const p of P.PREMIOS) S.carry[p] = S.won[p] ? 1 : acumN(p) + 1;
-    try { localStorage.setItem('pokino_carry', JSON.stringify(S.carry)); } catch {}
-  }
+  // cada jugador pone una ficha en cada vaso; los vasos que no se ganaron conservan lo que tenían
+  for (const p of P.PREMIOS) S.pot[p] = potN(p) + cfg().players;
+  S.wonAmt = {}; savePot();
   try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
   S.deck = P.shuffle(P.DECK); S.drawn = []; S.won = {}; S.wonBy = {}; S.overMsg = ''; S.guess = null;
   const d = cfg().detect;
@@ -278,6 +291,10 @@ const MASC = () => `<img class="masc ${S.phase === 'dealing' ? '' : 'pk-pop'}" s
 function render(flip) {
   const st = $('stage'), last = S.drawn[S.drawn.length - 1];
   $('headInfo').textContent = S.phase === 'setup' ? '' : `${S.drawn.length} de 48 cartas`;
+  // vasos: dibujo del vaso (o el icono del premio si aún no hay dibujo) con las fichas encima
+  $('pots').innerHTML = P.PREMIOS.map(p => `<div class="pot ${S.won[p] ? 'won' : ''}" title="${P.PREMIO_LABEL[p]}">
+      <div class="vw"><img src="${PK.IMG}pk_vaso_${p}.png" onerror="this.onerror=null;this.src='${PK.prize(p)}'" alt="">
+      <b class="${potN(p) ? '' : 'zero'}">${potN(p)}</b></div><span>${P.PREMIO_LABEL[p]}</span></div>`).join('');
   if (S.phase === 'setup') {
     st.innerHTML = `<img class="masc big pk-bob" src="${PK.mascot('reparte')}" alt=""><div class="big">Preparados</div><div class="mid mut">Un cartón por jugador y una ficha en cada vaso.</div>
       <div class="row"><button id="bStart">Empezar jugada</button><a href="imprimir_pokino.html" target="_blank"><button class="sec">Imprimir cartones</button></a></div>`;
@@ -291,7 +308,7 @@ function render(flip) {
       ${S.phase === 'paused' ? `<div class="big" style="color:var(--acc)">⏸ En pausa</div>
          <div class="row actrow">${MASC()}<button id="bClaim">Comprobar premio</button><button class="sec" id="bResume">Seguir repartiendo</button></div>` : ''}
       ${S.phase === 'over' ? `<div class="big">🏁 ¡Pokino!</div><div class="mid">${esc(S.overMsg)}</div>
-         <div class="mut">${pending().length ? 'Estos vasos no se vacían y acumulan para la siguiente jugada: ' + pending().map(p => P.PREMIO_LABEL[p] + (acumN(p) + 1 > 1 ? ` (${acumN(p) + 1} jugadas)` : '')).join(', ') : 'Se han cantado todos los premios'}</div>
+         <div class="mut">${pending().length ? 'Estos vasos no se vacían y pasan a la siguiente jugada: ' + pending().map(p => P.PREMIO_LABEL[p] + ' (' + fichasTxt(potN(p)) + ')').join(', ') : 'Se han cantado todos los premios'}</div>
          <div class="row actrow">${MASC()}<button id="bNew">Nueva jugada</button><button class="sec" id="bClaim">Comprobar otro premio</button></div>` : ''}`;
     if ($('bCant')) $('bCant').onclick = () => onClaim(null, 'botón');
     if ($('bClaim')) $('bClaim').onclick = () => openClaim(null, 'botón');
@@ -303,7 +320,7 @@ function render(flip) {
     const id = P.cardId(p, r), on = S.drawn.includes(id);
     return `<div class="c ${on ? 'on' : ''} ${id === last ? 'last' : ''}">${r}</div>`;
   }).join('')).join('');
-  $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Cartón ' + (S.wonBy[p] || []).map(n => String(n).padStart(4, '0')).join(' y ') + ' · carta ' + S.won[p] : acumN(p) > 1 ? `<b class="acum">Acumula ${acumN(p)} jugadas</b>` : 'En juego'}</span></div>`).join('');
+  $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Cartón ' + (S.wonBy[p] || []).map(n => String(n).padStart(4, '0')).join(' y ') + ' · carta ' + S.won[p] : S.phase === 'setup' ? (potN(p) ? `<b class="acum">${fichasTxt(potN(p))} de antes</b>` : 'Vacío') : `<b class="acum">${fichasTxt(potN(p))}</b>`}</span></div>`).join('');
   $('settings').style.display = (S.phase === 'setup' || S.phase === 'over') ? '' : 'none';
   $('boardPanel').style.display = S.phase === 'setup' ? 'none' : '';   // antes de empezar no hay cartas: deja sitio a los ajustes
 }
@@ -351,7 +368,7 @@ function renderV() {
       <div class="result ${r.ok ? 'ok' : 'ko'}">${r.ok ? `✅ ¡Válido! (${esc(r.opcion.name)})` : `❌ No es válido. Para ${P.PREMIO_LABEL[V.prize]} hace falta ${P.PREMIO_DESC[V.prize]}.`}</div>
       ${!r.ok && r.faltan.length ? `<div class="mut" style="text-align:center">Lo más cerca (${esc(r.opcion.name)}): faltan ${r.faltan.map(id => esc(P.cardLabel(id))).join(', ')}</div>` : ''}
       <div class="carton">${V.card.cells.map((id, i) => `<div class="k ${set.has(id) ? 'on' : ''} ${need.has(i) ? 'need' : ''}">${K.cardSVG(id, { style: 'compact', frame: false })}</div>`).join('')}</div>
-      ${r.ok ? `<div class="result ok" style="font-size:18px">🥃 Llévate el vaso de ${P.PREMIO_LABEL[V.prize]}${acumTxt(V.prize)}</div>` : ''}
+      ${r.ok ? `<div class="result ok" style="font-size:18px">🥃 Vaso de ${P.PREMIO_LABEL[V.prize]}: ${fichasTxt(S.wonAmt[V.prize])}${(S.wonBy[V.prize] || []).length > 1 ? ' a repartir entre ' + S.wonBy[V.prize].length : ''}</div>` : ''}
       <div class="row actions">
         <button class="sec" id="mOther">Comprobar otro</button>
         ${S.phase === 'paused' ? '<button class="sec" id="mResume">Seguir repartiendo</button>' : '<button class="sec" id="mClose">Cerrar</button>'}</div>`);
@@ -362,15 +379,14 @@ function renderV() {
 }
 function award() {
   const p = V.prize;
-  if (!S.won[p]) S.won[p] = S.drawn.length;
+  if (!S.won[p]) { S.won[p] = S.drawn.length; S.wonAmt[p] = potN(p); S.pot[p] = 0; savePot(); }   // el vaso se vacía
   (S.wonBy[p] = S.wonBy[p] || []).includes(+V.num) || S.wonBy[p].push(+V.num);   // empate: varios cartones
-  PK.celebrate({ premio: p, title: '¡' + P.PREMIO_LABEL[p] + '!', subtitle: 'Cartón ' + V.num.padStart(4, '0') + acumTxt(p) });
+  PK.celebrate({ premio: p, title: '¡' + P.PREMIO_LABEL[p] + '!', subtitle: 'Cartón ' + V.num.padStart(4, '0') + ' · ' + fichasTxt(S.wonAmt[p]) + ((S.wonBy[p] || []).length > 1 ? ' a repartir' : '') });
   render();
   if (p === 'pokino') endRound('Pokino del cartón ' + V.num.padStart(4, '0'));
 }
 // vasos acumulados: un premio que no sale en una jugada se queda con sus fichas para la siguiente
-const acumN = p => S.carry[p] || 1;
-const acumTxt = p => acumN(p) > 1 ? ` · ¡acumulado de ${acumN(p)} jugadas!` : '';
+const fichasTxt = n => (n || 0) + (n === 1 ? ' ficha' : ' fichas');
 function showModal(html) { $('modal').innerHTML = `<div class="modal"><div class="box">${html}</div></div>`; }
 function closeModal() { $('modal').innerHTML = ''; }
 
