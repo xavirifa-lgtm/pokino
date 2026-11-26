@@ -143,6 +143,10 @@
     const t = norm(text);
     for (const [p, re] of PATRONES) if (re.test(t)) return p;
     if (soundsPokino(t)) return 'pokino';
+    // Lo que el reconocedor suele escribir al oír "pokino": "por qué no", "aquí no", "poqui no"...
+    // Son frases normales, así que solo cuentan si es casi lo único que se ha dicho (como cuando se grita).
+    const w = t.split(' ').filter(Boolean);
+    if (w.length <= 4 && /\b(porque no|por que no|por qui no|aqui no|poqui no|boqui no|toqui no|po qui no|pa qui no)\b/.test(t)) return 'pokino';
     return null;
   }
 

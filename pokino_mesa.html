@@ -57,7 +57,8 @@
   .carton .k.on { opacity:1; } .carton .k.need { border-color:var(--bad); } .carton .k.need.on { border-color:var(--ok); }
   .carton .k svg { width:100%; height:auto; display:block; }
   .result { font-size:22px; margin:8px 0; text-align:center; } .result.ok { color:var(--ok); } .result.ko { color:var(--bad); }
-  .masc { position:absolute; left:14px; bottom:10px; width:130px; pointer-events:none; filter:drop-shadow(0 6px 12px #0007); }
+  .actrow { position:relative; width:fit-content; margin:0 auto; flex-wrap:nowrap; }
+  .masc { position:absolute; right:calc(100% + 14px); bottom:-4px; width:130px; pointer-events:none; filter:drop-shadow(0 6px 12px #0007); }
   .masc.big { position:static; width:210px; }
   .boxmasc { width:96px; float:right; margin:-6px -4px 0 10px; }
   .modal .box { background:#0e2f20f2; }
@@ -93,7 +94,7 @@
       <label>Cantar las cartas en voz alta <input type="checkbox" id="cfgVoice" checked style="width:22px;height:22px"></label>
       <label>Para cantar premio
         <select id="cfgDetect"><option value="voz">Voz (micrófono)</option><option value="timbre">Timbre físico</option><option value="nada">Solo botón</option></select></label>
-      <div class="small mut">Voz: gritad "¡Póker!", "¡Esquina!", "¡Pokino!"… Timbre: usa la calibración del timbre de Musikino (calíbralo allí).</div>
+      <div class="small mut">Voz: gritad "¡Centro!", "¡Póker!", "¡Esquina!"… Para Pokino, "¡Bingo!" (o "¡Línea!"): la palabra "pokino" el reconocedor no la conoce. Timbre: usa la calibración del timbre de Musikino (calíbralo allí).</div>
     </div>
   </aside>
 </main>
@@ -196,7 +197,7 @@ function stopRecognition() { R.want = false; if (R.rec) try { R.rec.stop(); } ca
 function updateListen() {
   const el = $('listen'); if (!el) return;
   el.className = 'listen' + (R.ok && !R.muted ? ' on' : '');
-  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio (para Pokino vale también «línea» o «bingo»)' : '🎤 Micrófono arrancando…'))
+  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio (para Pokino, gritad «¡Bingo!»)' : '🎤 Micrófono arrancando…'))
     + (R.heard && R.heard.trim() ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '')
     + (!R.ok && R.code && R.code !== 'no-speech' && R.code !== 'aborted' ? `<span class="heard">Aviso del micro: ${esc(R.code)}</span>` : '');
 }
@@ -263,6 +264,8 @@ function onClaim(prize, how) {
 function endRound(msg) { clearTimeout(S.timer); S.phase = 'over'; S.overMsg = msg; stopRecognition(); closeModal(); render(); }
 
 // ---------- pantalla ----------
+// mascota de pie junto a los botones: los pies a la altura del botón
+const MASC = () => `<img class="masc ${S.phase === 'dealing' ? '' : 'pk-pop'}" src="${PK.mascot(S.phase === 'dealing' ? 'reparte' : S.phase === 'over' ? 'celebra' : 'escucha')}" alt="">`;
 function render(flip) {
   const st = $('stage'), last = S.drawn[S.drawn.length - 1];
   $('headInfo').textContent = S.phase === 'setup' ? '' : `${S.drawn.length} de 48 cartas`;
@@ -275,13 +278,12 @@ function render(flip) {
       ${last !== undefined ? `<div class="current ${flip ? 'flip' : ''}">${K.cardSVG(last)}</div><div class="big">${esc(P.cardLabel(last))}</div>` : ''}
       ${S.phase === 'dealing' ? `<div class="count">Siguiente carta en <b id="left">${cfg().sec}</b> s</div>
          ${cfg().detect === 'voz' ? '<div class="listen" id="listen"></div>' : cfg().detect === 'timbre' ? '<div class="listen on">🔔 Tocad el timbre para cantar premio</div>' : ''}
-         <div class="row"><button class="sec" id="bCant">✋ Cantar premio</button></div>` : ''}
+         <div class="row actrow">${MASC()}<button class="sec" id="bCant">✋ Cantar premio</button></div>` : ''}
       ${S.phase === 'paused' ? `<div class="big" style="color:var(--acc)">⏸ En pausa</div>
-         <div class="row"><button id="bClaim">Comprobar premio</button><button class="sec" id="bResume">Seguir repartiendo</button></div>` : ''}
+         <div class="row actrow">${MASC()}<button id="bClaim">Comprobar premio</button><button class="sec" id="bResume">Seguir repartiendo</button></div>` : ''}
       ${S.phase === 'over' ? `<div class="big">🏁 ¡Pokino!</div><div class="mid">${esc(S.overMsg)}</div>
          <div class="mut">${pending().length ? 'Pasan a la siguiente jugada: ' + pending().map(p => P.PREMIO_LABEL[p]).join(', ') : 'Se han cantado todos los premios'}</div>
-         <div class="row"><button id="bNew">Nueva jugada</button><button class="sec" id="bClaim">Comprobar otro premio</button></div>` : ''}
-      <img class="masc ${S.phase === 'dealing' ? '' : 'pk-pop'}" src="${PK.mascot(S.phase === 'dealing' ? 'reparte' : S.phase === 'over' ? 'celebra' : 'escucha')}" alt="">`;
+         <div class="row actrow">${MASC()}<button id="bNew">Nueva jugada</button><button class="sec" id="bClaim">Comprobar otro premio</button></div>` : ''}`;
     if ($('bCant')) $('bCant').onclick = () => onClaim(null, 'botón');
     if ($('bClaim')) $('bClaim').onclick = () => openClaim(null, 'botón');
     if ($('bResume')) $('bResume').onclick = resume;
