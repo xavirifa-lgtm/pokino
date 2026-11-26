@@ -73,7 +73,7 @@
     <div class="panel" style="margin-top:14px"><b>Premios de esta jugada</b><div id="prizes"></div></div>
     <div class="panel" style="margin-top:14px" id="settings">
       <b>Ajustes</b>
-      <label>Segundos entre cartas <input type="number" id="cfgSec" value="5" min="2" max="30"></label>
+      <label>Segundos para cantar premio entre carta y carta <input type="number" id="cfgSec" value="5" min="2" max="30"></label>
       <label>Cantar las cartas en voz alta <input type="checkbox" id="cfgVoice" checked style="width:22px;height:22px"></label>
       <label>Para cantar premio
         <select id="cfgDetect"><option value="voz">Voz (micrófono)</option><option value="timbre">Timbre físico</option><option value="nada">Solo botón</option></select></label>
@@ -98,8 +98,19 @@ try { const sv = JSON.parse(localStorage.getItem('pokino_cfg') || '{}'); if (sv.
 
 // ---------- voz que canta las cartas ----------
 function say(text) {
-  if (!cfg().voice || !('speechSynthesis' in window)) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'es-ES'; u.rate = 1; speechSynthesis.speak(u); } catch {}
+  if (!cfg().voice || !('speechSynthesis' in window)) return false;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'es-ES'; u.rate = 1.05;
+    // mientras la tablet habla, el micrófono se apaga: si no, se oye a sí misma y no entiende a los jugadores
+    muteRec(true);
+    let done = false; const myId = R.sayId = (R.sayId || 0) + 1;
+    const back = () => { if (done || myId !== R.sayId) return; done = true; muteRec(false); if (S.waitSpeech) scheduleNext(); };   // solo cuenta la última frase
+    u.onend = back; u.onerror = back;
+    clearTimeout(R.muteT); R.muteT = setTimeout(back, 1200 + text.length * 90);   // por si el móvil no avisa de que ha terminado
+    speechSynthesis.speak(u);
+    return true;
+  } catch { muteRec(false); return false; }
 }
 let actx = null;
 function buzz() {
@@ -112,7 +123,14 @@ function buzz() {
 }
 
 // ---------- reconocimiento de voz ----------
-const R = { rec: null, want: false, ok: false, err: '' };
+const R = { rec: null, want: false, ok: false, err: '', muted: false, muteT: null };
+function muteRec(on) {
+  if (!R.rec || !R.want) { R.muted = false; return; }
+  if (on) { if (!R.muted) { R.muted = true; R.heard = ''; try { R.rec.abort(); } catch {} updateListen(); } return; }
+  if (!R.muted) return;
+  clearTimeout(R.muteT); R.muted = false; updateListen();
+  if (!R.ok) try { R.rec.start(); } catch {}          // si sigue cerrándose, ya lo vuelve a abrir onend
+}
 function startRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { R.err = 'Este navegador no tiene reconocimiento de voz (usa Chrome).'; render(); return; }
@@ -121,6 +139,7 @@ function startRecognition() {
   rec.lang = 'es-ES'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 3;
   rec.onstart = () => { R.ok = true; R.err = ''; updateListen(); };
   rec.onresult = ev => {
+    if (R.muted) return;                                // restos de lo que ha dicho la propia tablet
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const res = ev.results[i];
       R.heard = res[0].transcript; updateListen();
@@ -139,14 +158,14 @@ function startRecognition() {
     }
   };
   rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { R.want = false; R.err = 'Permiso de micrófono denegado.'; } else if (e.error === 'network') R.err = 'Sin conexión: el reconocimiento de voz necesita internet.'; updateListen(); };
-  rec.onend = () => { R.ok = false; updateListen(); if (R.want) setTimeout(() => { if (R.want) try { rec.start(); } catch {} }, 250); };
+  rec.onend = () => { R.ok = false; updateListen(); if (R.want && !R.muted) setTimeout(() => { if (R.want && !R.muted && !R.ok) try { rec.start(); } catch {} }, 150); };
   try { rec.start(); } catch {}
 }
 function stopRecognition() { R.want = false; if (R.rec) try { R.rec.stop(); } catch {} }
 function updateListen() {
   const el = $('listen'); if (!el) return;
-  el.className = 'listen' + (R.ok ? ' on' : '');
-  el.innerHTML = esc(R.err || (R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono en espera…')) + (R.ok && R.heard ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '');
+  el.className = 'listen' + (R.ok && !R.muted ? ' on' : '');
+  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta… (el micro vuelve enseguida)' : R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono en espera…')) + (R.ok && R.heard ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '');
 }
 // número dicho en voz alta: se enseña y, si nadie toca nada, se comprueba solo en 1,5 s
 function autoCheck() {
@@ -189,16 +208,23 @@ function dealNext() {
   if (S.phase !== 'dealing') return;
   if (!S.deck.length) { S.phase = 'paused'; render(); return; }
   const id = S.deck.shift(); S.drawn.push(id);
-  say('¡' + P.cardSpeech(id) + '!');
+  // la cuenta atrás empieza cuando la tablet termina de cantar la carta:
+  // así los "segundos entre cartas" son enteros para escuchar a los jugadores
+  S.waitSpeech = say('¡' + P.cardSpeech(id) + '!');
   render(true);
+  if (!S.waitSpeech) scheduleNext();
+}
+function scheduleNext() {
+  clearTimeout(S.timer); S.waitSpeech = false;
+  if (S.phase !== 'dealing') return;
   S.nextAt = Date.now() + cfg().sec * 1000;
   S.timer = setTimeout(dealNext, cfg().sec * 1000);
 }
-function pause() { clearTimeout(S.timer); if (S.phase === 'dealing') { S.phase = 'paused'; render(); } }
+function pause() { clearTimeout(S.timer); S.waitSpeech = false; if (S.phase === 'dealing') { S.phase = 'paused'; render(); } }
 function resume() { if (S.phase !== 'paused') return; closeModal(); S.phase = 'dealing'; render(); S.timer = setTimeout(dealNext, 1500); }
 function onClaim(prize, how) {
   if (S.phase !== 'dealing' || $('modal').innerHTML) return;
-  pause(); PK.chime(); try { speechSynthesis.cancel(); } catch {}
+  pause(); PK.chime(); try { speechSynthesis.cancel(); } catch {} muteRec(false);
   S.guess = prize; openClaim(prize, how);
 }
 function endRound(msg) { clearTimeout(S.timer); S.phase = 'over'; S.overMsg = msg; stopRecognition(); closeModal(); render(); }
@@ -237,7 +263,7 @@ function render(flip) {
   $('settings').style.display = (S.phase === 'setup' || S.phase === 'over') ? '' : 'none';
 }
 const pending = () => P.PREMIOS.filter(p => !S.won[p]);
-setInterval(() => { const el = $('left'); if (el && S.phase === 'dealing') el.textContent = Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)); }, 250);
+setInterval(() => { const el = $('left'); if (el && S.phase === 'dealing') el.textContent = S.waitSpeech ? cfg().sec : Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)); }, 250);
 
 // ---------- comprobar premio ----------
 const V = {};
