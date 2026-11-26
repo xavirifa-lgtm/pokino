@@ -36,7 +36,7 @@
   .board .c.on { background:var(--acc); color:#2a2000; } .board .c.last { outline:2px solid #fff; }
   .prize { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 2px; border-bottom:1px solid var(--line); font-size:18px; }
   .prize img { width:38px; height:38px; object-fit:contain; vertical-align:middle; margin-right:8px; } .prize.won img { filter:drop-shadow(0 0 6px #ffd54a); }
-  .prize .st { color:var(--mut); font-size:14px; } .prize.won .st { color:var(--ok); }
+  .prize .st { color:var(--mut); font-size:14px; } .prize .st .acum { color:var(--acc); } .prize.won .st { color:var(--ok); }
   label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:8px 0; color:var(--mut); }
   input[type=number], select { background:#0f2318; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:7px; font-size:16px; }
   input[type=number] { width:80px; }
@@ -94,6 +94,7 @@
       <label>Cantar las cartas en voz alta <input type="checkbox" id="cfgVoice" checked style="width:22px;height:22px"></label>
       <label>Para cantar premio
         <select id="cfgDetect"><option value="voz">Voz (micrófono)</option><option value="timbre">Timbre físico</option><option value="nada">Solo botón</option></select></label>
+      <div class="row" style="justify-content:flex-start;margin:6px 0"><button class="sec" id="bResetCarry" style="font-size:14px;padding:7px 12px">Vasos vacíos (partida nueva)</button></div>
       <div class="small mut">Voz: gritad "¡Centro!", "¡Póker!", "¡Esquina!"… Para Pokino, "¡Bingo!" (o "¡Línea!"): la palabra "pokino" el reconocedor no la conoce. Timbre: usa la calibración del timbre de Musikino (calíbralo allí).</div>
     </div>
   </aside>
@@ -107,10 +108,11 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 const S = {
   phase: 'setup',            // setup | dealing | paused | over
-  deck: [], drawn: [], won: {}, wonBy: {}, nextAt: 0, timer: null, guess: null, lastHeard: '', overMsg: '',
+  deck: [], drawn: [], won: {}, wonBy: {}, carry: (() => { try { return JSON.parse(localStorage.getItem('pokino_carry') || '{}'); } catch { return {}; } })(), nextAt: 0, timer: null, guess: null, lastHeard: '', overMsg: '',
 };
 const cfg = () => ({ sec: Math.max(0.5, +$('cfgSec').value || 5), voice: $('cfgVoice').checked, detect: $('cfgDetect').value });
 try { const sv = JSON.parse(localStorage.getItem('pokino_cfg') || '{}'); if (sv.sec) $('cfgSec').value = sv.sec; if (sv.voice === false) $('cfgVoice').checked = false; if (sv.detect) $('cfgDetect').value = sv.detect; } catch {}
+$('bResetCarry').onclick = () => { S.carry = {}; S.won = {}; try { localStorage.removeItem('pokino_carry'); } catch {} if (S.phase === 'over') S.phase = 'setup'; render(); };
 ['cfgSec', 'cfgVoice', 'cfgDetect'].forEach(id => $(id).onchange = () => { try { localStorage.setItem('pokino_cfg', JSON.stringify(cfg())); } catch {} });
 
 // ---------- voz que canta las cartas ----------
@@ -184,7 +186,9 @@ function startRecognition() {
         continue;
       }
       for (let a = 0; a < res.length; a++) {
-        const txt = res[a].transcript; const p = P.detectClaim(sinTablet(txt)) || P.detectClaim(txt);
+        // mientras la frase no está acabada solo valen palabras claras ("po…" podría acabar siendo "póker")
+        const txt = res[a].transcript, loose = res.isFinal;
+        const p = P.detectClaim(sinTablet(txt), loose) || P.detectClaim(txt, loose);
         if (p) { S.lastHeard = txt; onClaim(p, 'voz'); return; }
       }
     }
@@ -206,7 +210,7 @@ function autoCheck() {
   clearTimeout(V.autoT);
   V.autoT = setTimeout(() => { if (V.step === 'card' && +V.num > 0) checkCard(); }, 1500);
 }
-function checkCard() { clearTimeout(V.autoT); V.card = P.cardFromNumber(+V.num); V.res = P.validate(V.card, V.prize, S.drawn); V.step = 'result'; V.sounded = false; renderV(); }
+function checkCard() { clearTimeout(V.autoT); V.card = P.cardFromNumber(+V.num); V.res = P.validate(V.card, V.prize, S.drawn); V.step = 'result'; V.sounded = false; V.given = false; renderV(); }
 
 // ---------- timbre por micrófono (reutiliza la calibración de Musikino) ----------
 const B = { an: null, buf: null, binHz: 0, loop: null, hits: 0, last: 0,
@@ -230,6 +234,11 @@ async function startBell() {
 
 // ---------- jugada ----------
 function startRound() {
+  // los premios ganados en la jugada anterior vuelven a empezar; los no ganados siguen acumulando
+  if (S.phase === 'over') {
+    for (const p of P.PREMIOS) S.carry[p] = S.won[p] ? 1 : acumN(p) + 1;
+    try { localStorage.setItem('pokino_carry', JSON.stringify(S.carry)); } catch {}
+  }
   try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
   S.deck = P.shuffle(P.DECK); S.drawn = []; S.won = {}; S.wonBy = {}; S.overMsg = ''; S.guess = null;
   const d = cfg().detect;
@@ -282,7 +291,7 @@ function render(flip) {
       ${S.phase === 'paused' ? `<div class="big" style="color:var(--acc)">⏸ En pausa</div>
          <div class="row actrow">${MASC()}<button id="bClaim">Comprobar premio</button><button class="sec" id="bResume">Seguir repartiendo</button></div>` : ''}
       ${S.phase === 'over' ? `<div class="big">🏁 ¡Pokino!</div><div class="mid">${esc(S.overMsg)}</div>
-         <div class="mut">${pending().length ? 'Pasan a la siguiente jugada: ' + pending().map(p => P.PREMIO_LABEL[p]).join(', ') : 'Se han cantado todos los premios'}</div>
+         <div class="mut">${pending().length ? 'Estos vasos no se vacían y acumulan para la siguiente jugada: ' + pending().map(p => P.PREMIO_LABEL[p] + (acumN(p) + 1 > 1 ? ` (${acumN(p) + 1} jugadas)` : '')).join(', ') : 'Se han cantado todos los premios'}</div>
          <div class="row actrow">${MASC()}<button id="bNew">Nueva jugada</button><button class="sec" id="bClaim">Comprobar otro premio</button></div>` : ''}`;
     if ($('bCant')) $('bCant').onclick = () => onClaim(null, 'botón');
     if ($('bClaim')) $('bClaim').onclick = () => openClaim(null, 'botón');
@@ -294,7 +303,7 @@ function render(flip) {
     const id = P.cardId(p, r), on = S.drawn.includes(id);
     return `<div class="c ${on ? 'on' : ''} ${id === last ? 'last' : ''}">${r}</div>`;
   }).join('')).join('');
-  $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Cartón ' + (S.wonBy[p] || []).map(n => String(n).padStart(4, '0')).join(' y ') + ' · carta ' + S.won[p] : 'En juego'}</span></div>`).join('');
+  $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Cartón ' + (S.wonBy[p] || []).map(n => String(n).padStart(4, '0')).join(' y ') + ' · carta ' + S.won[p] : acumN(p) > 1 ? `<b class="acum">Acumula ${acumN(p)} jugadas</b>` : 'En juego'}</span></div>`).join('');
   $('settings').style.display = (S.phase === 'setup' || S.phase === 'over') ? '' : 'none';
   $('boardPanel').style.display = S.phase === 'setup' ? 'none' : '';   // antes de empezar no hay cartas: deja sitio a los ajustes
 }
@@ -303,7 +312,7 @@ setInterval(() => { const el = $('left'); if (el && S.phase === 'dealing') el.te
 
 // ---------- comprobar premio ----------
 const V = {};
-function openClaim(guess, how) { clearTimeout(V.autoT); Object.assign(V, { step: 'prize', prize: guess, how, num: '', res: null, awarded: false, voiceNum: false }); renderV(); }
+function openClaim(guess, how) { clearTimeout(V.autoT); Object.assign(V, { step: 'prize', prize: guess, how, num: '', res: null, awarded: false, voiceNum: false, given: false }); renderV(); }
 function renderV() {
   const n = S.drawn.length;
   if (V.step === 'prize') {
@@ -336,25 +345,32 @@ function renderV() {
   } else if (V.step === 'result') {
     const r = V.res, need = new Set(r.opcion ? r.opcion.idx : []), set = new Set(S.drawn);
     if (!V.sounded) { V.sounded = true; if (!r.ok) PK.boing(); }
+    // si es válido se apunta y se celebra al momento (no hace falta pulsar nada)
+    if (r.ok && !V.given) { V.given = true; award(); if (V.prize === 'pokino') return; }
     showModal(`<img class="boxmasc ${r.ok ? 'pk-pop' : 'pk-shake'}" src="${PK.mascot(r.ok ? 'celebra' : 'fallo')}" alt=""><h2>Cartón ${V.num.padStart(4, '0')} · ${P.PREMIO_LABEL[V.prize]}</h2>
       <div class="result ${r.ok ? 'ok' : 'ko'}">${r.ok ? `✅ ¡Válido! (${esc(r.opcion.name)})` : `❌ No es válido. Para ${P.PREMIO_LABEL[V.prize]} hace falta ${P.PREMIO_DESC[V.prize]}.`}</div>
       ${!r.ok && r.faltan.length ? `<div class="mut" style="text-align:center">Lo más cerca (${esc(r.opcion.name)}): faltan ${r.faltan.map(id => esc(P.cardLabel(id))).join(', ')}</div>` : ''}
       <div class="carton">${V.card.cells.map((id, i) => `<div class="k ${set.has(id) ? 'on' : ''} ${need.has(i) ? 'need' : ''}">${K.cardSVG(id, { style: 'compact', frame: false })}</div>`).join('')}</div>
-      <div class="row actions">${r.ok ? `<button id="mAward">Dar el vaso de ${P.PREMIO_LABEL[V.prize]}</button>` : ''}
+      ${r.ok ? `<div class="result ok" style="font-size:18px">🥃 Llévate el vaso de ${P.PREMIO_LABEL[V.prize]}${acumTxt(V.prize)}</div>` : ''}
+      <div class="row actions">
         <button class="sec" id="mOther">Comprobar otro</button>
         ${S.phase === 'paused' ? '<button class="sec" id="mResume">Seguir repartiendo</button>' : '<button class="sec" id="mClose">Cerrar</button>'}</div>`);
-    if ($('mAward')) $('mAward').onclick = () => {
-      if (!S.won[V.prize]) S.won[V.prize] = S.drawn.length;
-      (S.wonBy[V.prize] = S.wonBy[V.prize] || []).includes(+V.num) || S.wonBy[V.prize].push(+V.num);   // empate: varios cartones
-      PK.celebrate({ premio: V.prize, title: '¡' + P.PREMIO_LABEL[V.prize] + '!', subtitle: 'Cartón ' + V.num.padStart(4, '0') });
-      if (V.prize === 'pokino') endRound('Pokino del cartón ' + V.num.padStart(4, '0'));
-      else { V.awarded = true; V.step = 'prize'; V.prize = null; V.how = 'botón'; render(); renderV(); }
-    };
-    $('mOther').onclick = () => { V.step = 'prize'; V.prize = null; V.how = 'botón'; renderV(); };
+    $('mOther').onclick = () => { V.awarded = V.awarded || r.ok; V.step = 'prize'; V.prize = null; V.how = 'botón'; V.given = false; renderV(); };
     if ($('mResume')) $('mResume').onclick = resume;
     if ($('mClose')) $('mClose').onclick = closeModal;
   }
 }
+function award() {
+  const p = V.prize;
+  if (!S.won[p]) S.won[p] = S.drawn.length;
+  (S.wonBy[p] = S.wonBy[p] || []).includes(+V.num) || S.wonBy[p].push(+V.num);   // empate: varios cartones
+  PK.celebrate({ premio: p, title: '¡' + P.PREMIO_LABEL[p] + '!', subtitle: 'Cartón ' + V.num.padStart(4, '0') + acumTxt(p) });
+  render();
+  if (p === 'pokino') endRound('Pokino del cartón ' + V.num.padStart(4, '0'));
+}
+// vasos acumulados: un premio que no sale en una jugada se queda con sus fichas para la siguiente
+const acumN = p => S.carry[p] || 1;
+const acumTxt = p => acumN(p) > 1 ? ` · ¡acumulado de ${acumN(p)} jugadas!` : '';
 function showModal(html) { $('modal').innerHTML = `<div class="modal"><div class="box">${html}</div></div>`; }
 function closeModal() { $('modal').innerHTML = ''; }
 

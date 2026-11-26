@@ -139,10 +139,11 @@
     return cands.some(c => c.length >= 5 && c.length <= 8 && !NO.includes(c) && lev(fon(c), 'pokino') <= 1);
   }
   /** Devuelve el primer premio reconocido en el texto (o null). Pokino tiene prioridad. */
-  function detectClaim(text) {
+  function detectClaim(text, loose = true) {
     const t = norm(text);
     for (const [p, re] of PATRONES) if (re.test(t)) return p;
     if (soundsPokino(t)) return 'pokino';
+    if (!loose) return null;
     // Lo que el reconocedor suele escribir al oír "pokino": "por qué no", "aquí no", "poqui no"...
     // Son frases normales, así que solo cuentan si es casi lo único que se ha dicho (como cuando se grita).
     // En reconocimiento continuo el texto se va acumulando: se mira solo lo último que se ha dicho.
