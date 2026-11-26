@@ -62,6 +62,22 @@
   .boxmasc { width:96px; float:right; margin:-6px -4px 0 10px; }
   .modal .box { background:#0e2f20f2; }
   @media (max-width: 1000px) { .masc { width:90px; } }
+  /* Tablet en horizontal / pantalla ancha: todo cabe en la pantalla, sin desplazar */
+  @media (min-width: 1001px) {
+    body { height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+    header { padding:4px 20px; } header .logo { height:clamp(34px, 7vh, 58px); }
+    main { flex:1; min-height:0; padding:clamp(8px, 1.8vh, 18px) 20px; gap:16px; }
+    .stage { min-height:0; overflow:hidden; gap:clamp(6px, 1.6vh, 14px); padding:clamp(8px, 1.6vh, 16px); }
+    .current svg { width:auto; height:clamp(150px, 38vh, 345px); }
+    .big { font-size:clamp(24px, 5.2vh, 40px); } .mid { font-size:clamp(16px, 2.8vh, 21px); }
+    .masc { width:clamp(70px, 17vh, 130px); } .masc.big { width:clamp(110px, 27vh, 210px); }
+    button { padding:clamp(9px, 1.8vh, 14px) 22px; font-size:clamp(16px, 2.6vh, 19px); }
+    aside { min-height:0; overflow:auto; display:flex; flex-direction:column; gap:clamp(8px, 1.5vh, 14px); }
+    aside .panel { margin-top:0 !important; padding:clamp(8px, 1.6vh, 16px); }
+    .prize { padding:clamp(1px, .5vh, 6px) 2px; font-size:clamp(14px, 2.4vh, 18px); }
+    .prize img { width:clamp(24px, 4.6vh, 38px); height:clamp(24px, 4.6vh, 38px); }
+    label { margin:clamp(3px, .8vh, 8px) 0; }
+  }
 </style>
 </head>
 <body>
@@ -69,7 +85,7 @@
 <main>
   <section class="panel stage" id="stage"></section>
   <aside>
-    <div class="panel"><b>Cartas que han salido</b><div class="board" id="board" style="margin-top:8px"></div></div>
+    <div class="panel" id="boardPanel"><b>Cartas que han salido</b><div class="board" id="board" style="margin-top:8px"></div></div>
     <div class="panel" style="margin-top:14px"><b>Premios de esta jugada</b><div id="prizes"></div></div>
     <div class="panel" style="margin-top:14px" id="settings">
       <b>Ajustes</b>
@@ -278,6 +294,7 @@ function render(flip) {
   }).join('')).join('');
   $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Ganado (carta ' + S.won[p] + ')' : 'En juego'}</span></div>`).join('');
   $('settings').style.display = (S.phase === 'setup' || S.phase === 'over') ? '' : 'none';
+  $('boardPanel').style.display = S.phase === 'setup' ? 'none' : '';   // antes de empezar no hay cartas: deja sitio a los ajustes
 }
 const pending = () => P.PREMIOS.filter(p => !S.won[p]);
 setInterval(() => { const el = $('left'); if (el && S.phase === 'dealing') el.textContent = S.waitSpeech ? cfg().sec : Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)); }, 250);

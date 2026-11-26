@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokino</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="pk-theme.js"></script>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; font-family:"Fredoka",system-ui,sans-serif; color:#f2f7f3; background:#0b2a1c url(img_pk/pk_fondo.jpg) center/cover fixed;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; padding:clamp(10px, 3vh, 24px); text-align:center; }
+  .logo { width:min(460px, 86vw, 62vh); filter:drop-shadow(0 6px 14px #0009); }
+  .sub { color:#cfe3d6; font-size:clamp(16px, 2.6vh, 20px); margin:4px 0 clamp(10px, 2.6vh, 22px); }
+  .mascot { height:clamp(80px, 20vh, 170px); margin-bottom:4px; filter:drop-shadow(0 6px 12px #0007); }
+  .modes { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; width:min(760px, 100%); }
+  a.mode { display:block; text-decoration:none; color:inherit; background:#0e2f20e6; border:1px solid #2f6b4b; border-radius:18px; padding:clamp(12px, 2.4vh, 20px); transition:transform .15s, border-color .15s; box-shadow:0 8px 24px #0006; }
+  a.mode:hover { transform:translateY(-3px); border-color:#ffd54a; }
+  a.mode b { display:block; font-size:24px; color:#ffd54a; margin-bottom:6px; }
+  a.mode span { color:#cfe3d6; font-size:15px; line-height:1.35; }
+</style>
+</head>
+<body>
+  <img class="mascot pk-bob" src="img_pk/pk_mascota_reparte.png" alt="">
+  <img class="logo" src="img_pk/pk_logo.png" alt="Pokino">
+  <div class="sub">La tablet reparte, vosotros cantáis.</div>
+  <div class="modes">
+    <a class="mode" href="pokino_mesa.html"><b>🃏 Jugar</b><span>La tablet saca y canta las cartas. Cuando alguien cante un premio (voz, timbre o botón), comprueba el cartón por su número.</span></a>
+    <a class="mode" href="imprimir_pokino.html"><b>🖨️ Imprimir cartones</b><span>Cartones numerados en color o blanco y negro: 1 por hoja con las jugadas explicadas, o 4 por hoja.</span></a>
+  </div>
+<script>PK.injectStyles(); PK.preload();</script>
+</body>
+</html>
