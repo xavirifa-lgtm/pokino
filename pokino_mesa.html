@@ -42,6 +42,7 @@
   input[type=number] { width:80px; }
   .count { color:var(--mut); font-size:18px; } .count b { color:var(--acc); }
   .listen { font-size:14px; color:var(--mut); } .listen.on { color:var(--ok); }
+  .listen .heard { display:block; color:var(--mut); font-size:13px; margin-top:2px; }
   .modal { position:fixed; inset:0; background:#000b; display:flex; align-items:center; justify-content:center; z-index:10; }
   .box { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:20px; width:min(780px,96vw); max-height:94vh; overflow:auto; }
   .box h2 { margin:0 0 12px; font-size:22px; }
@@ -50,7 +51,8 @@
   .keypad { display:grid; grid-template-columns:repeat(3,90px); gap:10px; justify-content:center; margin:12px 0; }
   .keypad button { font-size:28px; padding:16px 0; }
   .display { font-size:46px; font-weight:900; letter-spacing:10px; text-align:center; color:var(--acc); min-height:56px; }
-  .carton { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; max-width:430px; margin:10px auto; }
+  .carton { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; width:min(430px, 100%, calc((94vh - 290px) / 1.38)); min-width:200px; margin:8px auto; }
+  .box .row.actions { position:sticky; bottom:-20px; margin:6px -20px -20px; padding:12px 20px 16px; background:#0e2f20; border-top:1px solid var(--line); border-radius:0 0 18px 18px; }
   .carton .k { background:#fff; border-radius:6px; padding:2px; opacity:.35; border:3px solid transparent; }
   .carton .k.on { opacity:1; } .carton .k.need { border-color:var(--bad); } .carton .k.need.on { border-color:var(--ok); }
   .carton .k svg { width:100%; height:auto; display:block; }
@@ -121,6 +123,15 @@ function startRecognition() {
   rec.onresult = ev => {
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const res = ev.results[i];
+      R.heard = res[0].transcript; updateListen();
+      // pidiendo el número de cartón: se puede decir en voz alta
+      if ($('modal').innerHTML && V.step === 'card') {
+        for (let a = 0; a < res.length; a++) {
+          const n = P.parseNumber(res[a].transcript);
+          if (n) { V.num = String(n); V.voiceNum = true; renderV(); if (res.isFinal) autoCheck(); return; }
+        }
+        continue;
+      }
       for (let a = 0; a < res.length; a++) {
         const txt = res[a].transcript; const p = P.detectClaim(txt);
         if (p) { S.lastHeard = txt; onClaim(p, 'voz'); return; }
@@ -132,7 +143,17 @@ function startRecognition() {
   try { rec.start(); } catch {}
 }
 function stopRecognition() { R.want = false; if (R.rec) try { R.rec.stop(); } catch {} }
-function updateListen() { const el = $('listen'); if (el) { el.className = 'listen' + (R.ok ? ' on' : ''); el.textContent = R.err || (R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono en espera…'); } }
+function updateListen() {
+  const el = $('listen'); if (!el) return;
+  el.className = 'listen' + (R.ok ? ' on' : '');
+  el.innerHTML = esc(R.err || (R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono en espera…')) + (R.ok && R.heard ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '');
+}
+// número dicho en voz alta: se enseña y, si nadie toca nada, se comprueba solo en 1,5 s
+function autoCheck() {
+  clearTimeout(V.autoT);
+  V.autoT = setTimeout(() => { if (V.step === 'card' && +V.num > 0) checkCard(); }, 1500);
+}
+function checkCard() { clearTimeout(V.autoT); V.card = P.cardFromNumber(+V.num); V.res = P.validate(V.card, V.prize, S.drawn); V.step = 'result'; V.sounded = false; renderV(); }
 
 // ---------- timbre por micrófono (reutiliza la calibración de Musikino) ----------
 const B = { an: null, buf: null, binHz: 0, loop: null, hits: 0, last: 0,
@@ -177,7 +198,7 @@ function pause() { clearTimeout(S.timer); if (S.phase === 'dealing') { S.phase =
 function resume() { if (S.phase !== 'paused') return; closeModal(); S.phase = 'dealing'; render(); S.timer = setTimeout(dealNext, 1500); }
 function onClaim(prize, how) {
   if (S.phase !== 'dealing' || $('modal').innerHTML) return;
-  pause(); buzz(); try { speechSynthesis.cancel(); } catch {}
+  pause(); PK.chime(); try { speechSynthesis.cancel(); } catch {}
   S.guess = prize; openClaim(prize, how);
 }
 function endRound(msg) { clearTimeout(S.timer); S.phase = 'over'; S.overMsg = msg; stopRecognition(); closeModal(); render(); }
@@ -220,7 +241,7 @@ setInterval(() => { const el = $('left'); if (el && S.phase === 'dealing') el.te
 
 // ---------- comprobar premio ----------
 const V = {};
-function openClaim(guess, how) { Object.assign(V, { step: 'prize', prize: guess, how, num: '', res: null, awarded: false }); renderV(); }
+function openClaim(guess, how) { clearTimeout(V.autoT); Object.assign(V, { step: 'prize', prize: guess, how, num: '', res: null, awarded: false, voiceNum: false }); renderV(); }
 function renderV() {
   const n = S.drawn.length;
   if (V.step === 'prize') {
@@ -232,23 +253,24 @@ function renderV() {
       }).join('')}</div>
       <div class="row" style="margin-top:14px">${V.prize && !(S.won[V.prize] && S.won[V.prize] !== n) ? `<button id="mNext">Seguir con ${P.PREMIO_LABEL[V.prize]}</button>` : ''}
         <button class="sec" id="mFalse">${V.awarded ? 'Seguir repartiendo' : 'Falsa alarma: seguir repartiendo'}</button></div>`);
-    document.querySelectorAll('.prizes button').forEach(b => b.onclick = () => { V.prize = b.dataset.p; V.step = 'card'; renderV(); });
-    if ($('mNext')) $('mNext').onclick = () => { V.step = 'card'; renderV(); };
+    document.querySelectorAll('.prizes button').forEach(b => b.onclick = () => { V.prize = b.dataset.p; V.step = 'card'; V.num = ''; V.voiceNum = false; renderV(); });
+    if ($('mNext')) $('mNext').onclick = () => { V.step = 'card'; V.num = ''; V.voiceNum = false; renderV(); };
     $('mFalse').onclick = () => { closeModal(); if (S.phase === 'paused') resume(); };
   } else if (V.step === 'card') {
     showModal(`<h2>${P.PREMIO_LABEL[V.prize]} · número de cartón</h2>
       <div class="display">${V.num.padStart(4, '·')}</div>
+      <div class="mut" style="text-align:center;min-height:22px">${V.voiceNum ? `🎤 He oído ${+V.num}: compruebo en un momento (toca una tecla para corregir)` : R.ok ? '🎤 Puedes decir el número en voz alta o escribirlo' : ''}</div>
       <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => `<button class="sec" data-d="${d}">${d}</button>`).join('')}
         <button class="sec" data-d="del">⌫</button><button class="sec" data-d="0">0</button><button data-d="ok" ${+V.num > 0 ? '' : 'disabled'}>OK</button></div>
       <div class="row"><button class="sec" id="mBack">Atrás</button></div>`);
     document.querySelectorAll('.keypad button').forEach(b => b.onclick = () => {
-      const d = b.dataset.d;
+      const d = b.dataset.d; clearTimeout(V.autoT); if (V.voiceNum && d !== 'ok' && d !== 'del') V.num = ''; V.voiceNum = false;
       if (d === 'del') V.num = V.num.slice(0, -1);
-      else if (d === 'ok') { V.card = P.cardFromNumber(+V.num); V.res = P.validate(V.card, V.prize, S.drawn); V.step = 'result'; V.sounded = false; }
+      else if (d === 'ok') return checkCard();
       else if (V.num.length < 4) V.num = (V.num + d).replace(/^0+(?=\d)/, '');
       renderV();
     });
-    $('mBack').onclick = () => { V.step = 'prize'; renderV(); };
+    $('mBack').onclick = () => { clearTimeout(V.autoT); V.voiceNum = false; V.step = 'prize'; renderV(); };
   } else if (V.step === 'result') {
     const r = V.res, need = new Set(r.opcion ? r.opcion.idx : []), set = new Set(S.drawn);
     if (!V.sounded) { V.sounded = true; if (!r.ok) PK.boing(); }
@@ -256,7 +278,7 @@ function renderV() {
       <div class="result ${r.ok ? 'ok' : 'ko'}">${r.ok ? `✅ ¡Válido! (${esc(r.opcion.name)})` : `❌ No es válido. Para ${P.PREMIO_LABEL[V.prize]} hace falta ${P.PREMIO_DESC[V.prize]}.`}</div>
       ${!r.ok && r.faltan.length ? `<div class="mut" style="text-align:center">Lo más cerca (${esc(r.opcion.name)}): faltan ${r.faltan.map(id => esc(P.cardLabel(id))).join(', ')}</div>` : ''}
       <div class="carton">${V.card.cells.map((id, i) => `<div class="k ${set.has(id) ? 'on' : ''} ${need.has(i) ? 'need' : ''}">${K.cardSVG(id, { style: 'compact', frame: false })}</div>`).join('')}</div>
-      <div class="row">${r.ok ? `<button id="mAward">Dar el vaso de ${P.PREMIO_LABEL[V.prize]}</button>` : ''}
+      <div class="row actions">${r.ok ? `<button id="mAward">Dar el vaso de ${P.PREMIO_LABEL[V.prize]}</button>` : ''}
         <button class="sec" id="mOther">Comprobar otro</button>
         ${S.phase === 'paused' ? '<button class="sec" id="mResume">Seguir repartiendo</button>' : '<button class="sec" id="mClose">Cerrar</button>'}</div>`);
     if ($('mAward')) $('mAward').onclick = () => {

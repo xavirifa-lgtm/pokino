@@ -64,6 +64,20 @@
   }
   function fanfare() { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.11, 0.3)); tone(1047, 0.48, 0.6, 'triangle', 0.2); tone(1319, 0.48, 0.6, 'sine', 0.12); }
   function coins() { [1568, 2093, 1760, 2349, 1976].forEach((f, i) => tone(f, i * 0.06, 0.12, 'square', 0.05)); }
+  // aviso de "¡premio cantado!": campanilla de concurso, suave y alegre (sustituye al pitido)
+  function chime() {
+    const a = ctx(); if (!a) return;
+    const bell = (f, t0, dur, vol) => {
+      [1, 2.01, 3.02].forEach((m, i) => {   // fundamental + armónicos, como una campana
+        const o = a.createOscillator(), g = a.createGain();
+        o.type = 'sine'; o.frequency.value = f * m; o.connect(g); g.connect(a.destination);
+        const t = a.currentTime + t0, v = vol / (i * 2 + 1);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.start(t); o.stop(t + dur + 0.05);
+      });
+    };
+    bell(784, 0, 0.7, 0.22); bell(988, 0.12, 0.7, 0.22); bell(1319, 0.24, 1.1, 0.25);
+  }
   function boing() { tone(220, 0, 0.18, 'square', 0.08); tone(160, 0.12, 0.25, 'square', 0.07); }
 
   /** Celebración a pantalla completa: {premio, title, subtitle}. Se cierra tocando o a los ms. */
@@ -86,5 +100,5 @@
     ['pk_logo.png', 'pk_fondo.jpg'].forEach(n => { const i = new Image(); i.src = IMG + n; });
   }
 
-  root.PK = { IMG, prize, mascot, confetti, celebrate, fanfare, coins, boing, injectStyles, preload };
+  root.PK = { IMG, prize, mascot, confetti, celebrate, fanfare, coins, boing, chime, injectStyles, preload };
 })(typeof self !== 'undefined' ? self : this);

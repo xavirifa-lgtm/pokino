@@ -124,16 +124,56 @@
     ['estampa', /\b(estampa|estampas|estampao)\b/],
     ['centro', /\b(centro|centros)\b/],
   ];
+  // "Pokino" no es una palabra del diccionario y el reconocedor la escribe de mil maneras
+  // (poquino, boquino, toquino, poki no...): se compara cómo suena, admitiendo una letra de diferencia.
+  const fon = w => w.replace(/h/g, '').replace(/qu/g, 'k').replace(/c([aou])/g, 'k$1').replace(/c([ei])/g, 's$1')
+    .replace(/z/g, 's').replace(/v/g, 'b').replace(/b/g, 'p').replace(/ll/g, 'y').replace(/(.)\1/g, '$1');
+  function lev(a, b) {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  }
+  function soundsPokino(t) {
+    const w = t.split(' ').filter(Boolean);
+    const cands = [...w, ...w.slice(1).map((x, i) => w[i] + x)];          // palabras sueltas y pares juntos ("poki no")
+    const NO = ['poquito', 'poquita', 'poquitos', 'poquitas'];          // palabras normales que suenan parecido
+    return cands.some(c => c.length >= 5 && c.length <= 8 && !NO.includes(c) && lev(fon(c), 'pokino') <= 1);
+  }
   /** Devuelve el primer premio reconocido en el texto (o null). Pokino tiene prioridad. */
   function detectClaim(text) {
     const t = norm(text);
     for (const [p, re] of PATRONES) if (re.test(t)) return p;
+    if (soundsPokino(t)) return 'pokino';
     return null;
+  }
+
+  // ---------- Número de cartón dicho en voz alta ----------
+  const NUM = { cero: 0, un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9,
+    diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19,
+    veinte: 20, veintiun: 21, veintiuno: 21, veintiuna: 21, veintidos: 22, veintitres: 23, veinticuatro: 24, veinticinco: 25,
+    veintiseis: 26, veintisiete: 27, veintiocho: 28, veintinueve: 29, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60,
+    setenta: 70, ochenta: 80, noventa: 90, cien: 100, ciento: 100, doscientos: 200, doscientas: 200, trescientos: 300,
+    cuatrocientos: 400, quinientos: 500, seiscientos: 600, setecientos: 700, ochocientos: 800, novecientos: 900 };
+  /** "123", "1 2 3", "ciento veintitrés", "uno dos tres", "cartón número 45"… → 123 / 45 (o null) */
+  function parseNumber(text) {
+    const t = norm(text);
+    const digits = (t.match(/\d/g) || []).join('');
+    if (digits) return digits.length <= 4 && +digits > 0 ? +digits : null;
+    const toks = t.split(' ').filter(x => x in NUM || x === 'mil');
+    if (!toks.length) return null;
+    // "uno dos tres" (cifra a cifra) → 123
+    if (toks.length > 1 && toks.every(x => x !== 'mil' && NUM[x] <= 9)) { const n = +toks.map(x => NUM[x]).join(''); return n > 0 && n <= 9999 ? n : null; }
+    let total = 0, cur = 0;
+    for (const x of toks) { if (x === 'mil') { total += (cur || 1) * 1000; cur = 0; } else cur += NUM[x]; }
+    const n = total + cur;
+    return n > 0 && n <= 9999 ? n : null;
   }
 
   return {
     PALOS, RANGOS, DECK, PREMIOS, PREMIO_LABEL, PREMIO_DESC, LINES, POKINO_LINES, ESTAMPAS,
     cardId, palo, rango, cardLabel, cardSpeech, rangoTxt, mulberry32, shuffle,
-    cardFromNumber, options, validate, completed, detectClaim,
+    cardFromNumber, options, validate, completed, detectClaim, parseNumber,
   };
 });
