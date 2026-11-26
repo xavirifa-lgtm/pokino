@@ -180,7 +180,7 @@ function stopRecognition() { R.want = false; if (R.rec) try { R.rec.stop(); } ca
 function updateListen() {
   const el = $('listen'); if (!el) return;
   el.className = 'listen' + (R.ok && !R.muted ? ' on' : '');
-  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono arrancando…'))
+  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio (para Pokino vale también «línea» o «bingo»)' : '🎤 Micrófono arrancando…'))
     + (R.heard && R.heard.trim() ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '')
     + (!R.ok && R.code && R.code !== 'no-speech' && R.code !== 'aborted' ? `<span class="heard">Aviso del micro: ${esc(R.code)}</span>` : '');
 }

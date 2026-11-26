@@ -114,7 +114,7 @@
   // ---------- Detección de lo que se canta (reconocimiento de voz) ----------
   const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim();
   const PATRONES = [
-    ['pokino', /\b(pokino|pokinos|poquino|poquinos|bokino|pokin|poki no|po kino|poke no|pokemon|poquini|pequino)\b/],
+    ['pokino', /\b(pokino|pokinos|poquino|poquinos|bokino|pokin|poki no|po kino|poke no|pokemon|poquini|pequino|bingo|linea)\b/],   // bingo y línea también valen como pokino
     ['poker', /\b(poker|poquer|pocker|poke)\b/],
     ['full', /\b(full|ful|fool|fullo)\b/],
     ['esquina', /\b(esquina|esquinas)\b/],
