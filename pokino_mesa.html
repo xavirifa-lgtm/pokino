@@ -102,8 +102,8 @@ function say(text) {
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text); u.lang = 'es-ES'; u.rate = 1.05;
-    // mientras la tablet habla, el micrófono se apaga: si no, se oye a sí misma y no entiende a los jugadores
-    muteRec(true);
+    // mientras la tablet habla se ignora lo que oye el micro (si no, se oye a sí misma)
+    muteRec(true); R.said = text;
     let done = false; const myId = R.sayId = (R.sayId || 0) + 1;
     const back = () => { if (done || myId !== R.sayId) return; done = true; muteRec(false); if (S.waitSpeech) scheduleNext(); };   // solo cuenta la última frase
     u.onend = back; u.onerror = back;
@@ -123,26 +123,41 @@ function buzz() {
 }
 
 // ---------- reconocimiento de voz ----------
-const R = { rec: null, want: false, ok: false, err: '', muted: false, muteT: null };
+const R = { rec: null, want: false, ok: false, err: '', muted: false, muteT: null, last: 0, code: '', said: '' };
+// El micro NO se apaga mientras habla la tablet (en algunos Android luego no vuelve a arrancar):
+// solo se ignora lo que llega en ese rato. Al terminar, se escucha con normalidad.
 function muteRec(on) {
-  if (!R.rec || !R.want) { R.muted = false; return; }
-  if (on) { if (!R.muted) { R.muted = true; R.heard = ''; try { R.rec.abort(); } catch {} updateListen(); } return; }
+  if (on) { R.muted = true; R.heard = ''; updateListen(); return; }
   if (!R.muted) return;
-  clearTimeout(R.muteT); R.muted = false; updateListen();
-  if (!R.ok) try { R.rec.start(); } catch {}          // si sigue cerrándose, ya lo vuelve a abrir onend
+  clearTimeout(R.muteT);
+  setTimeout(() => { R.muted = false; updateListen(); }, 250);   // el eco de la última sílaba
 }
+// quita de lo oído las palabras que acaba de decir la tablet ("el siete de copas")
+function sinTablet(txt) {
+  if (!R.said) return txt;
+  const fuera = new Set(R.said.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean));
+  return txt.split(/\s+/).filter(w => !fuera.has(w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, ''))).join(' ');
+}
+// vigilante: si el micro se ha quedado parado o colgado, lo vuelve a arrancar
+setInterval(() => {
+  if (!R.rec || !R.want) return;
+  const quieto = Date.now() - R.last;
+  if (!R.ok && quieto > 1500) { R.last = Date.now(); try { R.rec.start(); } catch {} }
+  else if (R.ok && quieto > 20000) { R.last = Date.now(); try { R.rec.abort(); } catch {} }
+}, 1000);
 function startRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { R.err = 'Este navegador no tiene reconocimiento de voz (usa Chrome).'; render(); return; }
   if (R.rec) { R.want = true; try { R.rec.start(); } catch {} return; }
   const rec = new SR(); R.rec = rec; R.want = true;
   rec.lang = 'es-ES'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 3;
-  rec.onstart = () => { R.ok = true; R.err = ''; updateListen(); };
+  rec.onstart = () => { R.ok = true; R.err = ''; R.last = Date.now(); updateListen(); };
   rec.onresult = ev => {
-    if (R.muted) return;                                // restos de lo que ha dicho la propia tablet
+    R.last = Date.now();
+    if (R.muted) return;                                // lo que está diciendo la propia tablet
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const res = ev.results[i];
-      R.heard = res[0].transcript; updateListen();
+      R.heard = sinTablet(res[0].transcript); updateListen();
       // pidiendo el número de cartón: se puede decir en voz alta
       if ($('modal').innerHTML && V.step === 'card') {
         for (let a = 0; a < res.length; a++) {
@@ -157,15 +172,17 @@ function startRecognition() {
       }
     }
   };
-  rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { R.want = false; R.err = 'Permiso de micrófono denegado.'; } else if (e.error === 'network') R.err = 'Sin conexión: el reconocimiento de voz necesita internet.'; updateListen(); };
-  rec.onend = () => { R.ok = false; updateListen(); if (R.want && !R.muted) setTimeout(() => { if (R.want && !R.muted && !R.ok) try { rec.start(); } catch {} }, 150); };
+  rec.onerror = e => { R.last = Date.now(); R.code = e.error || ''; if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { R.want = false; R.err = 'Permiso de micrófono denegado.'; } else if (e.error === 'network') R.err = 'Sin conexión: el reconocimiento de voz necesita internet.'; updateListen(); };
+  rec.onend = () => { R.ok = false; R.last = Date.now(); updateListen(); if (R.want) setTimeout(() => { if (R.want && !R.ok) try { rec.start(); } catch {} }, 150); };
   try { rec.start(); } catch {}
 }
 function stopRecognition() { R.want = false; if (R.rec) try { R.rec.stop(); } catch {} }
 function updateListen() {
   const el = $('listen'); if (!el) return;
   el.className = 'listen' + (R.ok && !R.muted ? ' on' : '');
-  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta… (el micro vuelve enseguida)' : R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono en espera…')) + (R.ok && R.heard ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '');
+  el.innerHTML = esc(R.err || (R.muted ? '🗣️ Cantando la carta…' : R.ok ? '🎤 Escuchando: gritad el premio' : '🎤 Micrófono arrancando…'))
+    + (R.heard && R.heard.trim() ? `<span class="heard">Oigo: «${esc(R.heard.trim().slice(-40))}»</span>` : '')
+    + (!R.ok && R.code && R.code !== 'no-speech' && R.code !== 'aborted' ? `<span class="heard">Aviso del micro: ${esc(R.code)}</span>` : '');
 }
 // número dicho en voz alta: se enseña y, si nadie toca nada, se comprueba solo en 1,5 s
 function autoCheck() {
@@ -257,7 +274,7 @@ function render(flip) {
   }
   $('board').innerHTML = P.PALOS.map((pal, p) => `<div class="s">${pal}</div>` + P.RANGOS.map(r => {
     const id = P.cardId(p, r), on = S.drawn.includes(id);
-    return `<div class="c ${on ? 'on' : ''} ${id === last ? 'last' : ''}">${r === 1 ? 'A' : r === 10 ? 'S' : r === 11 ? 'C' : r === 12 ? 'R' : r}</div>`;
+    return `<div class="c ${on ? 'on' : ''} ${id === last ? 'last' : ''}">${r}</div>`;
   }).join('')).join('');
   $('prizes').innerHTML = P.PREMIOS.map(p => `<div class="prize ${S.won[p] ? 'won' : ''}"><span><img src="${PK.prize(p)}" alt="">${P.PREMIO_LABEL[p]}</span><span class="st">${S.won[p] ? 'Ganado (carta ' + S.won[p] + ')' : 'En juego'}</span></div>`).join('');
   $('settings').style.display = (S.phase === 'setup' || S.phase === 'over') ? '' : 'none';

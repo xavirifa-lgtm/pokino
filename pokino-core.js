@@ -8,7 +8,7 @@
   const PALOS = ['oros', 'copas', 'espadas', 'bastos'];
   const RANGOS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];          // baraja de 48
   const NOMBRE_RANGO = { 1: 'as', 10: 'sota', 11: 'caballo', 12: 'rey' };
-  const NUM_TXT = { 2: 'dos', 3: 'tres', 4: 'cuatro', 5: 'cinco', 6: 'seis', 7: 'siete', 8: 'ocho', 9: 'nueve' };
+  const NUM_TXT = { 1: 'uno', 2: 'dos', 3: 'tres', 4: 'cuatro', 5: 'cinco', 6: 'seis', 7: 'siete', 8: 'ocho', 9: 'nueve', 10: 'diez', 11: 'once', 12: 'doce' };
 
   // id de carta: palo*12 + (rango-1)  → 0..47
   const cardId = (palo, rango) => palo * 12 + (rango - 1);
@@ -17,14 +17,11 @@
   const DECK = [];
   for (let p = 0; p < 4; p++) for (const r of RANGOS) DECK.push(cardId(p, r));
 
-  function rangoTxt(r) { return NOMBRE_RANGO[r] || String(r); }
-  /** "7 de copas", "Rey de bastos" */
-  function cardLabel(id) { const r = rango(id); const t = rangoTxt(r); return (t[0].toUpperCase() + t.slice(1)) + ' de ' + PALOS[palo(id)]; }
-  /** Frase para decir en voz alta: "¡El siete de copas!", "¡La sota de oros!" */
-  function cardSpeech(id) {
-    const r = rango(id), art = r === 10 ? 'la' : 'el';
-    return `${art} ${NOMBRE_RANGO[r] || NUM_TXT[r]} de ${PALOS[palo(id)]}`;
-  }
+  function rangoTxt(r) { return String(r); }               // se canta y se escribe por número: 1…12 (no as/sota/caballo/rey)
+  /** "7 de copas", "12 de bastos" */
+  function cardLabel(id) { return rangoTxt(rango(id)) + ' de ' + PALOS[palo(id)]; }
+  /** Frase para decir en voz alta: "el siete de copas", "el doce de oros" */
+  function cardSpeech(id) { return `el ${NUM_TXT[rango(id)]} de ${PALOS[palo(id)]}`; }
 
   // ---------- RNG ----------
   function mulberry32(a) {
