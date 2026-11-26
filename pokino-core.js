@@ -115,7 +115,7 @@
   const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim();
   const PATRONES = [
     ['pokino', /\b(pokino|pokinos|poquino|poquinos|bokino|pokin|poki no|po kino|poke no|pokemon|poquini|pequino|bingo|linea)\b/],   // bingo y línea también valen como pokino
-    ['poker', /\b(poker|poquer|pocker|poke)\b/],
+    ['poker', /\b(poker|poquer|pocker|poke|pokers|poquers|po ker|po quer|poque)\b/],
     ['full', /\b(full|ful|fool|fullo)\b/],
     ['esquina', /\b(esquina|esquinas)\b/],
     ['estampa', /\b(estampa|estampas|estampao)\b/],
@@ -150,9 +150,9 @@
     const w = t.split(' ').filter(Boolean), cola = w.slice(-3);
     const fin = cola.join(' ');
     if (/\b(porque no|por que no|por qui no|aqui no|poqui no|boqui no|toqui no|po qui no|pa qui no)$/.test(fin)) return 'pokino';
-    // Modo permisivo (pedido expresamente): cualquier palabra que empiece por "po" en un grito corto
+    // Modo permisivo: cualquier palabra que empiece por "poki"/"poqui" en un grito corto
     // (póker ya se ha detectado antes), o un "o"/"no" gritado a solas.
-    if (w.length <= 3 && cola.some(x => /^po/.test(x))) return 'pokino';
+    if (w.length <= 3 && cola.some(x => /^(poki|poqui|boki|boqui)/.test(x))) return 'pokino';
     if (w.length === 1 && (w[0] === 'o' || w[0] === 'no' || w[0] === 'oh')) return 'pokino';
     return null;
   }
